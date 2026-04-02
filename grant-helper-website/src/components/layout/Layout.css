@@ -1,0 +1,36 @@
+.app-layout {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  background: #f9fafb;
+}
+
+.main-container {
+  flex: 1;
+  margin-left: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-area {
+  flex: 1;
+  margin-top: 70px;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .main-container {
+    margin-left: 80px;
+  }
+
+  .content-area {
+    padding: 1rem;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-layout {
+    background: #111827;
+  }
+}
