@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '../../config/supabase';
+import { isSupabaseConfigured, supabase } from '../../config/supabase';
 import './EmptyState.css';
 
 /**
@@ -48,7 +48,7 @@ export default function WorkspaceView({ organizationProfile = '', userId }: Work
     setLoading(true);
     try {
       let resolvedUserId = userId;
-      if (!resolvedUserId) {
+      if (!resolvedUserId && isSupabaseConfigured && supabase) {
         const { data: { session } } = await supabase.auth.getSession();
         resolvedUserId = session?.user?.id ?? undefined;
       }

@@ -120,6 +120,68 @@ interface ProfileStructuringRequestBody {
   userId?: unknown;
 }
 
+function getFieldSpecificGuidance(fieldKey: string): string {
+  switch (fieldKey) {
+    case 'contact_name':
+      return 'Expect a full person name. If only one name token is known, leave blank instead of inventing the rest.';
+    case 'first_name':
+      return 'Expect only the given name of a person.';
+    case 'last_name':
+      return 'Expect only the family name of a person. Do not use street, address, role, or organization words.';
+    case 'job_title':
+      return 'Expect a short professional role such as Executive Director or Program Manager. Leave blank if not explicit.';
+    case 'email':
+      return 'Expect a valid email address only. Confirmation and re-entry email fields should reuse that same address.';
+    case 'phone':
+    case 'mobile_phone':
+      return 'Expect a phone number only. Return digits or standard US formatting, not address text.';
+    case 'website':
+      return 'Expect an organization website URL or domain only.';
+    case 'address_line_1':
+      return 'Expect the street portion of an address only, not city/state/zip.';
+    case 'address_line_2':
+      return 'Expect only suite, unit, apartment, or secondary address information.';
+    case 'city':
+      return 'Expect a city or locality only, with no digits.';
+    case 'state':
+      return 'Expect a state or province only, typically a two-letter US abbreviation when applicable.';
+    case 'zip':
+      return 'Expect only a ZIP or postal code.';
+    case 'country':
+      return 'Expect only a country name.';
+    case 'organization_name':
+      return 'Expect the legal or common organization name only.';
+    case 'project_title':
+      return 'Expect a short, descriptive project or program title. If not explicit, you may synthesize a truthful title grounded in the mission and activities.';
+    case 'mission_statement':
+    case 'organization_description':
+    case 'organization_history':
+    case 'project_summary':
+    case 'project_abstract':
+    case 'project_goals':
+    case 'need_statement':
+    case 'target_population':
+    case 'geographic_area_served':
+    case 'program_description':
+    case 'impact_statement':
+    case 'outcomes':
+    case 'evaluation_plan':
+    case 'sustainability_plan':
+    case 'implementation_timeline':
+    case 'methods_approach':
+    case 'staffing_plan':
+    case 'partnerships':
+    case 'dei_statement':
+    case 'financial_need':
+    case 'organizational_capacity':
+    case 'board_governance':
+    case 'success_metrics':
+      return 'This is a narrative-style field. Use the document context to draft a concise, professional answer if the mission/program details are present.';
+    default:
+      return '';
+  }
+}
+
 function buildSystemInstruction(profileContext: string, grantContext: string): string {
   let out = RAG_SYSTEM_INSTRUCTION;
   if (profileContext.trim()) {
@@ -274,9 +336,14 @@ Return strict JSON only with keys: normalizedFieldKey, answer, confidence, ratio
 - For textarea questions, answer in one concise paragraph.
 - Do not guess a person's first or last name from an organization name.
 - For factual identity fields, only answer if the value is explicitly present in context.
+- Treat contact, email, phone, website, address, city, state, zip, country, EIN, UEI, DUNS, and job title as factual fields.
+- You may only synthesize new wording for narrative fields and project_title.
+- If fieldKey is project_title and the organization context clearly describes a program or mission but no explicit title exists, you may create a short, truthful 3-8 word title grounded in that mission.
+- If the field asks to confirm or re-enter an email/phone value, return the same explicit factual value only if it is present in context.
 - If the field should not be auto-filled or the context is insufficient, return answer as an empty string and confidence as low.
 - If you are unsure, leave the answer blank.`;
 
+  const fieldSpecificGuidance = getFieldSpecificGuidance(fieldKey);
   const prompt = `Field key guess: ${fieldKey || 'unknown'}
 Field question or label:
 ${questionText}
@@ -295,6 +362,9 @@ ${pageUrl || 'n/a'}
 
 Grant context:
 ${grantContext || 'n/a'}
+
+Field-specific guidance:
+${fieldSpecificGuidance || 'No additional guidance.'}
 
 Organization profile context:
 ${organizationContext}
@@ -389,6 +459,39 @@ function splitContactName(fullName: string): { first: string; last: string } {
   };
 }
 
+function toTitleCaseName(value: string): string {
+  return String(value || '')
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function inferNameFromEmail(email: string): { first: string; last: string; full: string } {
+  const trimmed = normalizeWhitespace(email);
+  if (!/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(trimmed)) {
+    return { first: '', last: '', full: '' };
+  }
+
+  const localPart = trimmed.split('@')[0];
+  const parts = localPart
+    .split(/[._-]+/)
+    .map((part) => part.replace(/[^a-z]/gi, ''))
+    .filter((part) => part.length >= 2);
+
+  if (parts.length < 2) {
+    return { first: '', last: '', full: '' };
+  }
+
+  const first = toTitleCaseName(parts[0]);
+  const last = toTitleCaseName(parts.slice(1).join(' '));
+  return {
+    first,
+    last,
+    full: `${first} ${last}`.trim(),
+  };
+}
+
 function parseAddressParts(address: string): Partial<StructuredProfile> {
   const parsed: Partial<StructuredProfile> = {};
   const clean = normalizeWhitespace(address.replace(/\baddress:\b/i, ''));
@@ -467,6 +570,13 @@ function extractStructuredProfileHeuristics(context: string): StructuredProfile 
     profile.last_name = split.last;
   }
 
+  profile.job_title = capturePattern(text, [
+    /title\s*\/\s*position[:\s]+([A-Za-z][A-Za-z\s/&-]{2,80})(?:\s{2,}|email:|phone:|$)/i,
+    /job title[:\s]+([A-Za-z][A-Za-z\s/&-]{2,80})(?:\s{2,}|email:|phone:|$)/i,
+    /position[:\s]+([A-Za-z][A-Za-z\s/&-]{2,80})(?:\s{2,}|email:|phone:|$)/i,
+    /role[:\s]+([A-Za-z][A-Za-z\s/&-]{2,80})(?:\s{2,}|email:|phone:|$)/i,
+  ]);
+
   if (emailMatch) {
     profile.email = emailMatch[0];
   }
@@ -517,6 +627,19 @@ function extractStructuredProfileHeuristics(context: string): StructuredProfile 
     profile.year_founded = yearFoundedMatch[0].match(/(19|20)\d{2}/)?.[0] || '';
   }
 
+  if (profile.email && (!profile.first_name || !profile.last_name || !profile.contact_name)) {
+    const inferredName = inferNameFromEmail(profile.email);
+    if (!profile.first_name && inferredName.first) {
+      profile.first_name = inferredName.first;
+    }
+    if (!profile.last_name && inferredName.last) {
+      profile.last_name = inferredName.last;
+    }
+    if (!profile.contact_name && inferredName.full) {
+      profile.contact_name = inferredName.full;
+    }
+  }
+
   return profile;
 }
 
@@ -561,11 +684,20 @@ Rules:
 - Only answer fields when the organization context explicitly supports the response.
 - For factual identity fields, do not guess.
 - Do not invent a person's first name, last name, phone, EIN, UEI, DUNS, address, or email.
+- Treat contact, email, phone, website, address, city, state, zip, country, EIN, UEI, DUNS, and job title as factual fields.
+- You may synthesize wording only for narrative-style fields and project_title.
+- For project_title, if the mission/program context is clear but no exact title exists, you may create a short, truthful title grounded in the described work.
 - For narrative and organization-description fields, write a concise grant-ready answer in one paragraph.
 - For short text fields, keep the answer short.
 - If a field should be skipped, return answer as an empty string with low confidence.
 - fieldKey must stay the same as provided unless it is blank, in which case return "unknown".
 - If you are unsure, leave the answer blank.`;
+
+  const fieldGuide = options.fields.map((field) => ({
+    index: field.index,
+    fieldKey: field.fieldKey,
+    guidance: getFieldSpecificGuidance(field.fieldKey),
+  }));
 
   const prompt = `Page title: ${options.pageTitle || 'n/a'}
 Page URL: ${options.pageUrl || 'n/a'}
@@ -575,6 +707,9 @@ ${options.grantContext || 'n/a'}
 
 Organization profile context:
 ${options.organizationContext}
+
+Field-specific guidance:
+${JSON.stringify(fieldGuide, null, 2)}
 
 Fields to answer:
 ${JSON.stringify(options.fields, null, 2)}`;

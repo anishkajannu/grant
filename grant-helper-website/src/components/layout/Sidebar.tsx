@@ -3,13 +3,13 @@ import './Sidebar.css';
 type NavItem = {
   id: string;
   label: string;
-  icon: string;
+  shortLabel: string;
 };
 
 const navItems: NavItem[] = [
-  { id: 'profile', label: 'Organization Profile', icon: '🏢' },
-  { id: 'search', label: 'Find Grants', icon: '🔍' },
-  { id: 'workspace', label: 'Grant Workspace', icon: '✍️' },
+  { id: 'profile', label: 'Organization Profile', shortLabel: '01' },
+  { id: 'search', label: 'Find Grants', shortLabel: '02' },
+  { id: 'workspace', label: 'Grant Workspace', shortLabel: '03' },
 ];
 
 interface SidebarProps {
@@ -21,8 +21,9 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <h1 className="sidebar-logo">💡 GrantFlow</h1>
-        <p className="sidebar-tagline">AI-Powered Grant Writing</p>
+        <p className="sidebar-eyebrow">Grant workflow system</p>
+        <h1 className="sidebar-logo">GrantFlow</h1>
+        <p className="sidebar-tagline">Search, organize, and complete grant applications with less repeated work.</p>
       </div>
 
       <nav className="sidebar-nav">
@@ -32,14 +33,14 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
             className={`nav-item ${activeView === item.id ? 'active' : ''}`}
             onClick={() => onNavigate(item.id)}
           >
-            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-icon" aria-hidden="true">{item.shortLabel}</span>
             <span className="nav-label">{item.label}</span>
           </button>
         ))}
       </nav>
 
       <div className="sidebar-footer">
-        <p className="footer-text">Built for nonprofits 💚</p>
+        <p className="footer-text">Built for nonprofit funding teams</p>
       </div>
     </aside>
   );

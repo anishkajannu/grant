@@ -1,8 +1,25 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { extractDocuments } from '../../api/extractDocuments';
-import { supabase, uploadToSupabase, getUserDocuments, deleteDocument } from '../../config/supabase';
+import { supabase, isSupabaseConfigured, uploadToSupabase, getUserDocuments, deleteDocument } from '../../config/supabase';
 import './EmptyState.css';
 import './ProfileView.css';
+
+const PROFILE_STORAGE_KEY = 'grantflow.organizationProfile';
+const PROFILE_SUMMARY_STORAGE_KEY = 'grantflow.profileSummary';
+const SAVED_DOCUMENTS_STORAGE_KEY = 'grantflow.savedDocuments';
+
+function buildProfileSummary(profile: string) {
+  const trimmed = profile.trim();
+  const preview = trimmed.slice(0, 320);
+  const sentenceCount = trimmed ? trimmed.split(/[.!?]+/).filter(Boolean).length : 0;
+
+  return {
+    preview,
+    characters: trimmed.length,
+    sentences: sentenceCount,
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 type UploadedFile = {
   id: string;
@@ -27,12 +44,12 @@ const FILE_TYPE_LABELS: Record<string, string> = {
 };
 
 const SUGGESTED_DOCS = [
-  { icon: '📄', label: 'IRS Determination Letter (501(c)(3))' },
-  { icon: '📋', label: 'Articles of Incorporation' },
-  { icon: '📊', label: 'IRS Form 990' },
-  { icon: '📝', label: 'Bylaws' },
-  { icon: '📈', label: 'Annual Report' },
-  { icon: '💼', label: 'Strategic Plan' },
+  { icon: 'A', label: 'IRS Determination Letter (501(c)(3))' },
+  { icon: 'B', label: 'Articles of Incorporation' },
+  { icon: 'C', label: 'IRS Form 990' },
+  { icon: 'D', label: 'Bylaws' },
+  { icon: 'E', label: 'Annual Report' },
+  { icon: 'F', label: 'Strategic Plan' },
 ];
 
 interface ProfileViewProps {
@@ -110,8 +127,7 @@ export default function ProfileView({onOrganizationProfileChange,
   };
 
   const loadSavedDocuments = useCallback(async () => {
-    const supabaseConfigured = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
-    if (!supabaseConfigured) {
+    if (!isSupabaseConfigured || !supabase) {
       setSavedDocuments([]);
       setSavedDocsError(null);
       return;
@@ -144,6 +160,17 @@ export default function ProfileView({onOrganizationProfileChange,
   useEffect(() => {
     loadSavedDocuments();
   }, [loadSavedDocuments]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(
+      SAVED_DOCUMENTS_STORAGE_KEY,
+      JSON.stringify(savedDocuments.map((doc) => doc.filename).filter(Boolean))
+    );
+  }, [savedDocuments]);
 
   const handleDeleteSavedDocument = useCallback(async (documentId: string, filename: string) => {
     const confirmed = window.confirm(`Remove "${filename}" from this account?`);
@@ -215,17 +242,19 @@ export default function ProfileView({onOrganizationProfileChange,
                     .join(' • ')}
                 </span>
               </div>
-              <span className="saved-document-status">
-                {(doc.status || 'saved').replace(/_/g, ' ')}
-              </span>
-              <button
-                type="button"
-                className="saved-document-delete"
-                onClick={() => handleDeleteSavedDocument(doc.id, doc.filename)}
-                disabled={deletingDocumentId === doc.id}
-              >
-                {deletingDocumentId === doc.id ? 'Removing...' : 'Remove'}
-              </button>
+              <div className="saved-document-actions">
+                <span className="saved-document-status">
+                  {(doc.status || 'saved').replace(/_/g, ' ')}
+                </span>
+                <button
+                  type="button"
+                  className="saved-document-delete"
+                  onClick={() => handleDeleteSavedDocument(doc.id, doc.filename)}
+                  disabled={deletingDocumentId === doc.id}
+                >
+                  {deletingDocumentId === doc.id ? 'Removing...' : 'Remove'}
+                </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -243,12 +272,11 @@ export default function ProfileView({onOrganizationProfileChange,
         )}
         <div className="profile-landing-grid">
           <div className="profile-landing-main">
-            <div className="empty-state-icon">🏢</div>
+            <p className="profile-hero-kicker">Organization profile</p>
             <h2 className="empty-state-title">Create Your Organization Profile</h2>
             <p className="empty-state-description">
-              Tell us about your nonprofit so we can find the perfect grants for you.
-              Upload your legal documents and our AI will extract the key details to
-              match you with relevant opportunities and help draft compelling grant applications.
+              Upload the documents your team already uses so GrantFlow can organize core information,
+              surface better-fit opportunities, and reduce repetitive application work.
             </p>
             <div className="empty-state-actions">
               <button className="btn-primary" onClick={() => setShowUpload(true)}>
@@ -263,26 +291,26 @@ export default function ProfileView({onOrganizationProfileChange,
           </div>
         </div>
 
-        <div className="feature-grid">
+        <div className="feature-grid feature-grid--profile">
           <div className="feature-card">
-            <div className="feature-icon">📋</div>
-            <h3 className="feature-title">Mission & Impact</h3>
+            <div className="feature-index">01</div>
+            <h3 className="feature-title">Shared profile context</h3>
             <p className="feature-text">
-              Share your organization's mission, programs, and the communities you serve.
+              Keep mission, history, programs, and core organizational details in one reusable place.
             </p>
           </div>
           <div className="feature-card">
-            <div className="feature-icon">💰</div>
-            <h3 className="feature-title">Financial Details</h3>
+            <div className="feature-index">02</div>
+            <h3 className="feature-title">Faster grant search</h3>
             <p className="feature-text">
-              Provide your budget, funding history, and financial needs.
+              Use uploaded materials to narrow the search toward grants that better fit the organization.
             </p>
           </div>
           <div className="feature-card">
-            <div className="feature-icon">🎯</div>
-            <h3 className="feature-title">Focus Areas</h3>
+            <div className="feature-index">03</div>
+            <h3 className="feature-title">Less repeated entry</h3>
             <p className="feature-text">
-              Identify your key program areas and target populations.
+              Reuse factual information across applications instead of rebuilding the same answers each time.
             </p>
           </div>
         </div>
@@ -321,7 +349,7 @@ export default function ProfileView({onOrganizationProfileChange,
             className="file-input-hidden"
             onChange={(e) => e.target.files && addFiles(e.target.files)}
           />
-          <div className="dropzone-icon">📂</div>
+          <div className="dropzone-icon" aria-hidden="true">+</div>
           <p className="dropzone-primary">
             {dragging ? 'Drop files here' : 'Drag & drop your files here'}
           </p>
@@ -364,7 +392,7 @@ export default function ProfileView({onOrganizationProfileChange,
                   <span className="file-name">{file.name}</span>
                   <span className="file-size">{formatSize(file.size)}</span>
                 </div>
-                <span className="file-status-icon">✅</span>
+                <span className="file-status-icon" aria-hidden="true">Ready</span>
                 <button
                   className="file-remove"
                   onClick={() => handleRemove(id)}
@@ -387,12 +415,16 @@ export default function ProfileView({onOrganizationProfileChange,
                 setSaveSuccess(null);
                 setExtracting(true);
                 try {
+                  const client = supabase;
                   const warnings: string[] = [];
                   // Ensure we have a user for Supabase (anonymous if needed) so uploads can be saved
-                  let { data: { session } } = await supabase.auth.getSession();
-                  const supabaseConfigured = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
-                  if (!session?.user && supabaseConfigured) {
-                    const { data: anon, error: anonErr } = await supabase.auth.signInAnonymously();
+                  let session = null;
+                  if (client) {
+                    const result = await client.auth.getSession();
+                    session = result.data.session;
+                  }
+                  if (!session?.user && isSupabaseConfigured && client) {
+                    const { data: anon, error: anonErr } = await client.auth.signInAnonymously();
                     if (anonErr) {
                       warnings.push(
                         `Documents were analyzed locally, but cloud saving is not fully configured yet: ${anonErr.message}.`
@@ -427,7 +459,25 @@ export default function ProfileView({onOrganizationProfileChange,
                   }
 
                   const { text } = await extractDocuments(files.map((f) => f.file));
-                  onOrganizationProfileChange(text);
+                  const extractedText = text.trim();
+                  if (extractedText && typeof window !== 'undefined') {
+                    const existingProfile = window.localStorage.getItem(PROFILE_STORAGE_KEY) || '';
+                    const mergedProfile = [existingProfile.trim(), extractedText]
+                      .filter(Boolean)
+                      .filter((value, index, all) => all.indexOf(value) === index)
+                      .join('\n\n');
+
+                    window.localStorage.setItem(PROFILE_STORAGE_KEY, mergedProfile);
+                    window.localStorage.setItem(
+                      PROFILE_SUMMARY_STORAGE_KEY,
+                      JSON.stringify(buildProfileSummary(mergedProfile))
+                    );
+                    onOrganizationProfileChange(mergedProfile);
+                  } else {
+                    onOrganizationProfileChange(text);
+                  }
+
+                  await loadSavedDocuments();
                   setSaveSuccess(`Saved your files and updated your organization profile from ${files.length} document${files.length === 1 ? '' : 's'}.`);
                   if (warnings.length) {
                     setUploadWarning(warnings[0]);
@@ -441,7 +491,7 @@ export default function ProfileView({onOrganizationProfileChange,
                 }
               }}
             >
-              {extracting ? 'Extracting…' : '✨ Analyze with AI'}
+              {extracting ? 'Processing…' : 'Build profile'}
             </button>
             {extractError && (
               <p className="upload-error" role="alert">

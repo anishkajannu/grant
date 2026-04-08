@@ -1,6 +1,11 @@
 node_modules/
 dist/
-.env
+.vite/
 .DS_Store
-coverage/
-*.log
+*.tsbuildinfo
+.env
+.env.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

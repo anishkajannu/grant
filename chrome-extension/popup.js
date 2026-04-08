@@ -1,24 +1,25 @@
 const statusNode = document.getElementById("status");
+const statusCardNode = document.getElementById("status-card");
 const resultsNode = document.getElementById("results");
 const autofillButton = document.getElementById("autofill-button");
 const openPlatformButton = document.getElementById("open-platform-button");
 const connectPlatformButton = document.getElementById("connect-platform-button");
-const platformUrlInput = document.getElementById("platform-url");
-const backendUrlInput = document.getElementById("backend-url");
 const profileSummaryNode = document.getElementById("profile-summary");
-const stepOpenNode = document.getElementById("step-open");
-const stepConnectNode = document.getElementById("step-connect");
-const stepAutofillNode = document.getElementById("step-autofill");
 
 const PLATFORM_URL_STORAGE_KEY = "grantflow.extension.platformUrl";
 const BACKEND_URL_STORAGE_KEY = "grantflow.extension.backendUrl";
 const PLATFORM_PROFILE_STORAGE_KEY = "grantflow.extension.profileSummary";
 const PLATFORM_PROFILE_TEXT_STORAGE_KEY = "grantflow.extension.profileText";
 const PLATFORM_USER_ID_STORAGE_KEY = "grantflow.extension.userId";
+const PLATFORM_ACCESS_TOKEN_STORAGE_KEY = "grantflow.extension.accessToken";
+const PLATFORM_DOCUMENT_NAMES_STORAGE_KEY = "grantflow.extension.documentNames";
 const STRUCTURED_PROFILE_STORAGE_KEY = "grantflow.extension.structuredProfile";
 const PROFILE_STORAGE_KEY = "grantflow.organizationProfile";
 const PROFILE_SUMMARY_STORAGE_KEY = "grantflow.profileSummary";
 const USER_ID_STORAGE_KEY = "grantflow.userId";
+const SAVED_DOCUMENTS_STORAGE_KEY = "grantflow.savedDocuments";
+const DEFAULT_PLATFORM_URL = "https://grantflowab2gene.vercel.app";
+const DEFAULT_BACKEND_URL = "https://grantflowab2gene.vercel.app";
 
 let lastScanPayload = null;
 
@@ -28,26 +29,76 @@ function setStatus(message) {
   statusNode.textContent = message;
 }
 
-function setStepState(node, state) {
-  node.classList.remove("step-card--active", "step-card--done");
-  if (state === "active") {
-    node.classList.add("step-card--active");
-  }
-  if (state === "done") {
-    node.classList.add("step-card--done");
-  }
+function setStatusState(state) {
+  statusCardNode.classList.remove(
+    "status-card--idle",
+    "status-card--working",
+    "status-card--success",
+    "status-card--error"
+  );
+  statusCardNode.classList.add(`status-card--${state}`);
 }
 
 function updateFlowState(options = {}) {
-  const hasPlatformOpen = Boolean(options.hasPlatformOpen);
   const hasConnectedProfile = Boolean(options.hasConnectedProfile);
 
-  setStepState(stepOpenNode, hasPlatformOpen ? "done" : "active");
-  setStepState(stepConnectNode, hasConnectedProfile ? "done" : (hasPlatformOpen ? "active" : ""));
-  setStepState(stepAutofillNode, hasConnectedProfile ? "active" : "");
-
   autofillButton.disabled = !hasConnectedProfile;
-  connectPlatformButton.textContent = hasConnectedProfile ? "Sync Again" : "Login / Connect";
+  connectPlatformButton.textContent = hasConnectedProfile ? "Sync Again" : "Connect & Sync";
+}
+
+function toOrigin(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+}
+
+async function getSavedUrls() {
+  const saved = await chrome.storage.local.get([
+    PLATFORM_URL_STORAGE_KEY,
+    BACKEND_URL_STORAGE_KEY
+  ]);
+
+  return {
+    platformUrl: saved[PLATFORM_URL_STORAGE_KEY] || DEFAULT_PLATFORM_URL,
+    backendUrl: saved[BACKEND_URL_STORAGE_KEY] || ""
+  };
+}
+
+function isLikelyGrantFlowTab(tab) {
+  const url = String(tab?.url || "");
+  const title = String(tab?.title || "").toLowerCase();
+  if (!url) {
+    return false;
+  }
+
+  return (
+    title.includes("grantflow") ||
+    url.includes("grantflow") ||
+    url.includes("vercel.app") ||
+    url.includes("grantflowab2gene.vercel.app") ||
+    url.includes("localhost:5173")
+  );
+}
+
+async function resolvePlatformAndBackendUrls() {
+  const saved = await getSavedUrls();
+  const tabs = await chrome.tabs.query({});
+  const preferredTab = tabs.find((tab) => {
+    const origin = toOrigin(tab.url || "");
+    return origin && (origin === saved.platformUrl || isLikelyGrantFlowTab(tab));
+  });
+
+  const platformUrl = preferredTab?.url ? toOrigin(preferredTab.url) : saved.platformUrl || DEFAULT_PLATFORM_URL;
+  const backendUrl = saved.backendUrl || platformUrl || DEFAULT_BACKEND_URL;
+
+  await chrome.storage.local.set({
+    [PLATFORM_URL_STORAGE_KEY]: platformUrl,
+    [BACKEND_URL_STORAGE_KEY]: backendUrl
+  });
+
+  return { platformUrl, backendUrl };
 }
 
 function escapeHtml(value) {
@@ -247,74 +298,38 @@ function renderGroup(groupName, fields) {
 
 function renderFields(payload) {
   lastScanPayload = payload;
-  const fields = payload.fields || [];
-  const summary = summarizeFields(fields);
-  const groupedFields = groupFields(fields);
-
-  if (fields.length === 0) {
-    resultsNode.innerHTML = "<p class=\"field-meta\">No visible form fields were detected on this page.</p>";
-    return;
-  }
-
-  resultsNode.innerHTML = `
-    <section class="summary-card">
-      <p class="summary-line">High confidence: ${summary.high}</p>
-      <p class="summary-line">Needs review: ${summary.review}</p>
-      <p class="summary-line">Unknown: ${summary.low}</p>
-    </section>
-  ` + groupedFields.map(([groupName, groupItems]) => renderGroup(groupName, groupItems)).join("");
+  resultsNode.innerHTML = "";
 }
 
-function renderProfileSummary(summary, structuredProfile, syncMeta = {}) {
-  if (!summary) {
-    profileSummaryNode.innerHTML = `<p class="field-meta">Not connected yet. Open the platform, upload profile documents there, then sync from the extension.</p>`;
+function renderProfileSummary(documentNames = []) {
+  if (!documentNames.length) {
+    profileSummaryNode.innerHTML = `<p class="field-meta">No synced documents yet. Upload files in GrantFlow, then click sync.</p>`;
     return;
   }
 
-  const filledStructuredCount = structuredProfile
-    ? Object.values(structuredProfile).filter((value) => String(value || "").trim()).length
-    : 0;
-  const syncBadge = syncMeta.documentContextUsed
-    ? "Profile + stored docs"
-    : structuredProfile
-      ? "Profile structured"
-      : "Profile only";
-
   profileSummaryNode.innerHTML = `
-    <h3 class="profile-summary-title">Connected Profile</h3>
-    <div class="profile-summary-grid">
-      <p class="field-meta">Characters: ${escapeHtml(String(summary.characters || 0))}</p>
-      <p class="field-meta">Sentences: ${escapeHtml(String(summary.sentences || 0))}</p>
-      <p class="field-meta">Structured fields: ${escapeHtml(String(filledStructuredCount))}</p>
-      <p class="field-meta">Sync source: ${escapeHtml(syncBadge)}</p>
-      <p class="field-meta">${escapeHtml(summary.preview || "No preview available.")}</p>
-    </div>
+    <h3 class="profile-summary-title">Saved Documents</h3>
+    <ul class="document-list">
+      ${documentNames.map((name) => `<li class="document-item">${escapeHtml(name)}</li>`).join("")}
+    </ul>
   `;
 }
 
 async function initializePopup() {
   const saved = await chrome.storage.local.get([
-    PLATFORM_URL_STORAGE_KEY,
-    BACKEND_URL_STORAGE_KEY,
-    PLATFORM_PROFILE_STORAGE_KEY,
-    STRUCTURED_PROFILE_STORAGE_KEY,
-    PLATFORM_PROFILE_TEXT_STORAGE_KEY
+    PLATFORM_PROFILE_TEXT_STORAGE_KEY,
+    PLATFORM_USER_ID_STORAGE_KEY,
+    PLATFORM_ACCESS_TOKEN_STORAGE_KEY,
+    PLATFORM_DOCUMENT_NAMES_STORAGE_KEY
   ]);
-
-  if (saved[PLATFORM_URL_STORAGE_KEY]) {
-    platformUrlInput.value = saved[PLATFORM_URL_STORAGE_KEY];
-  }
-  if (saved[BACKEND_URL_STORAGE_KEY]) {
-    backendUrlInput.value = saved[BACKEND_URL_STORAGE_KEY];
-  }
-
-  renderProfileSummary(
-    saved[PLATFORM_PROFILE_STORAGE_KEY] || null,
-    saved[STRUCTURED_PROFILE_STORAGE_KEY] || null
+  renderProfileSummary(saved[PLATFORM_DOCUMENT_NAMES_STORAGE_KEY] || []);
+  const hasConnectedProfile = Boolean(
+    saved[PLATFORM_PROFILE_TEXT_STORAGE_KEY] ||
+    saved[PLATFORM_USER_ID_STORAGE_KEY] ||
+    saved[PLATFORM_ACCESS_TOKEN_STORAGE_KEY]
   );
-  const hasPlatformOpen = Boolean(saved[PLATFORM_URL_STORAGE_KEY]);
-  const hasConnectedProfile = Boolean(saved[PLATFORM_PROFILE_TEXT_STORAGE_KEY]);
-  updateFlowState({ hasPlatformOpen, hasConnectedProfile });
+  setStatusState(hasConnectedProfile ? "success" : "idle");
+  updateFlowState({ hasConnectedProfile });
 }
 
 async function getPlatformTab(platformUrl) {
@@ -327,8 +342,238 @@ async function getPlatformTab(platformUrl) {
   return tabs.find((tab) => tab.url && tab.url.startsWith(platformUrl)) || null;
 }
 
+function normalizeWhitespace(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function capturePattern(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      return normalizeWhitespace(match[1].replace(/^["']|["']$/g, ""));
+    }
+  }
+  return "";
+}
+
+function splitContactName(fullName) {
+  const parts = normalizeWhitespace(fullName).split(" ").filter(Boolean);
+  if (parts.length < 2) {
+    return { first: "", last: "" };
+  }
+  return {
+    first: parts[0],
+    last: parts.slice(1).join(" ")
+  };
+}
+
+function toTitleCaseName(value) {
+  return String(value || "")
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function inferNameFromEmail(email) {
+  const trimmed = normalizeWhitespace(email);
+  if (!isLikelyEmail(trimmed)) {
+    return { first: "", last: "", full: "" };
+  }
+
+  const localPart = trimmed.split("@")[0];
+  const parts = localPart
+    .split(/[._-]+/)
+    .map((part) => part.replace(/[^a-z]/gi, ""))
+    .filter((part) => part.length >= 2);
+
+  if (parts.length < 2) {
+    return { first: "", last: "", full: "" };
+  }
+
+  const first = toTitleCaseName(parts[0]);
+  const last = toTitleCaseName(parts.slice(1).join(" "));
+  return {
+    first,
+    last,
+    full: `${first} ${last}`.trim()
+  };
+}
+
+function parseAddressParts(address) {
+  const parsed = {};
+  const clean = normalizeWhitespace(String(address || "").replace(/\baddress:\b/i, ""));
+  if (!clean) {
+    return parsed;
+  }
+
+  const cityStateZipMatch = clean.match(/^(.*?)(?:,\s*|\s+)([A-Za-z .'-]+),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)(?:\s+(United States|USA|US))?$/i);
+  if (cityStateZipMatch) {
+    parsed.address_line_1 = normalizeWhitespace(cityStateZipMatch[1]);
+    parsed.city = normalizeWhitespace(cityStateZipMatch[2]);
+    parsed.state = normalizeWhitespace(cityStateZipMatch[3]);
+    parsed.zip = normalizeWhitespace(cityStateZipMatch[4]);
+    parsed.country = normalizeWhitespace(cityStateZipMatch[5] || "United States");
+    return parsed;
+  }
+
+  const zipMatch = clean.match(/\b\d{5}(?:-\d{4})?\b/);
+  const stateMatch = clean.match(/\b([A-Z]{2})\s+\d{5}(?:-\d{4})?\b/);
+  const countryMatch = clean.match(/\b(United States|USA|US)\b/i);
+  const streetLeadMatch = clean.match(/^(\d+\s+[A-Za-z0-9.'# -]+?(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|court|ct|place|pl|terrace|ter|circle|cir)\b)/i);
+  const cityMatch = clean.match(/(?:^|,\s*)([A-Za-z .'-]+),\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?/);
+
+  if (streetLeadMatch) parsed.address_line_1 = normalizeWhitespace(streetLeadMatch[1]);
+  if (cityMatch) parsed.city = normalizeWhitespace(cityMatch[1]);
+  if (stateMatch) parsed.state = stateMatch[1];
+  if (zipMatch) parsed.zip = zipMatch[0];
+  if (countryMatch) parsed.country = countryMatch[1].toLowerCase() === "us" ? "United States" : normalizeWhitespace(countryMatch[1]);
+
+  return parsed;
+}
+
+function enrichStructuredProfileWithInferences(structuredProfile) {
+  if (!structuredProfile) {
+    return null;
+  }
+
+  const next = { ...structuredProfile };
+
+  const primaryAddressBlob = [
+    next.address_line_1,
+    next.address_line_2,
+    next.city,
+    next.state,
+    next.zip,
+    next.country
+  ].filter(Boolean).join(", ");
+
+  const reparsed = parseAddressParts(next.address_line_1 || primaryAddressBlob);
+  if (!next.address_line_1 && reparsed.address_line_1) {
+    next.address_line_1 = reparsed.address_line_1;
+  }
+  if (!next.address_line_2 && reparsed.address_line_2) {
+    next.address_line_2 = reparsed.address_line_2;
+  }
+  if (!next.city && reparsed.city) {
+    next.city = reparsed.city;
+  }
+  if (!next.state && reparsed.state) {
+    next.state = reparsed.state;
+  }
+  if (!next.zip && reparsed.zip) {
+    next.zip = reparsed.zip;
+  }
+  if (!next.country && reparsed.country) {
+    next.country = reparsed.country;
+  }
+
+  if (!next.country && next.state && next.zip) {
+    next.country = "United States";
+  }
+
+  if ((!next.contact_name || !String(next.contact_name).trim()) && next.first_name && next.last_name) {
+    next.contact_name = `${String(next.first_name).trim()} ${String(next.last_name).trim()}`.trim();
+  }
+
+  if ((!next.first_name || !next.last_name) && next.contact_name) {
+    const split = splitContactName(String(next.contact_name));
+    if (!next.first_name && split.first) {
+      next.first_name = split.first;
+    }
+    if (!next.last_name && split.last) {
+      next.last_name = split.last;
+    }
+  }
+
+  if ((!next.first_name || !next.last_name || !next.contact_name) && next.email) {
+    const inferredName = inferNameFromEmail(String(next.email));
+    if (!next.first_name && inferredName.first) {
+      next.first_name = inferredName.first;
+    }
+    if (!next.last_name && inferredName.last) {
+      next.last_name = inferredName.last;
+    }
+    if (!next.contact_name && inferredName.full) {
+      next.contact_name = inferredName.full;
+    }
+  }
+
+  return next;
+}
+
+function buildLocalStructuredProfile(profileText) {
+  const text = normalizeWhitespace(profileText);
+  if (!text) {
+    return null;
+  }
+
+  const profile = {};
+  const emailMatch = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
+  const phoneMatch = text.match(/(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/);
+  const websiteMatch = text.match(/\b(?:https?:\/\/)?(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?\b/i);
+  const einMatch = text.match(/\b\d{2}-\d{7}\b/);
+
+  profile.organization_name = capturePattern(text, [
+    /organization name[:\s]+["']?([^".]+)["']?/i,
+    /legal name[:\s]+["']?([^".]+)["']?/i,
+    /name of the nonprofit organization is ["']?([^".]+)["']?/i
+  ]);
+
+  const contactName = capturePattern(text, [
+    /contact person[:\s]+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z.'-]+)+)/i,
+    /owner\s*\/\s*founder:\s*name:\s*([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z.'-]+)+)/i,
+    /executive director[:\s]+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z.'-]+)+)/i
+  ]);
+
+  if (contactName) {
+    profile.contact_name = contactName;
+    const split = splitContactName(contactName);
+    profile.first_name = split.first;
+    profile.last_name = split.last;
+  }
+
+  profile.job_title = capturePattern(text, [
+    /title\s*\/\s*position[:\s]+([A-Za-z][A-Za-z\s/&-]{2,80})(?:\s{2,}|email:|phone:|$)/i,
+    /job title[:\s]+([A-Za-z][A-Za-z\s/&-]{2,80})(?:\s{2,}|email:|phone:|$)/i,
+    /position[:\s]+([A-Za-z][A-Za-z\s/&-]{2,80})(?:\s{2,}|email:|phone:|$)/i,
+    /role[:\s]+([A-Za-z][A-Za-z\s/&-]{2,80})(?:\s{2,}|email:|phone:|$)/i
+  ]);
+
+  if (emailMatch) profile.email = emailMatch[0];
+  if (phoneMatch) {
+    profile.phone = normalizeWhitespace(phoneMatch[0]);
+    profile.mobile_phone = normalizeWhitespace(phoneMatch[0]);
+  }
+  if (websiteMatch && !websiteMatch[0].includes("@")) {
+    profile.website = websiteMatch[0].startsWith("http") ? websiteMatch[0] : `https://${websiteMatch[0]}`;
+  }
+  if (einMatch) profile.ein = einMatch[0];
+
+  const addressBlob = capturePattern(text, [
+    /principal office address:\s*([^]+?)\s*(?:registered agent:|contact information:|board of directors:|owner|founder|$)/i,
+    /mailing address:\s*([^]+?)\s*(?:registered agent:|contact information:|board of directors:|owner|founder|$)/i,
+    /address:\s*([^]+?)\s*(?:phone:|email:|registered agent:|owner|founder|$)/i
+  ]);
+  if (addressBlob) {
+    Object.assign(profile, parseAddressParts(addressBlob));
+  }
+
+  profile.mission_statement = capturePattern(text, [
+    /mission statement[:\s]+(.*?)(?:project title:|organization website:|annual operating budget:|$)/i,
+    /purpose:\s*(.*?)(?:principal office address:|registered agent:|contact information:|$)/i,
+    /mission[:\s]+(.*?)(?:programs?:|services?:|$)/i
+  ]);
+  if (profile.mission_statement && !profile.organization_description) {
+    profile.organization_description = profile.mission_statement;
+  }
+
+  return profile;
+}
+
 async function syncStructuredProfile(backendUrl, profileText, userId) {
-  if (!backendUrl || !profileText) {
+  const accessToken = arguments[3] || "";
+  if (!backendUrl || (!profileText && !userId && !accessToken)) {
     return { structuredProfile: null, documentContextUsed: false };
   }
 
@@ -337,7 +582,8 @@ async function syncStructuredProfile(backendUrl, profileText, userId) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       organizationProfile: profileText,
-      userId: userId || ""
+      userId: userId || "",
+      accessToken
     })
   });
 
@@ -353,96 +599,129 @@ async function syncStructuredProfile(backendUrl, profileText, userId) {
 }
 
 async function connectToPlatform() {
-  const platformUrl = platformUrlInput.value.trim().replace(/\/+$/, "");
-  const backendUrl = backendUrlInput.value.trim().replace(/\/+$/, "");
-
-  if (!platformUrl) {
-    setStatus("Enter the platform URL first.");
-    return;
-  }
-
-  await chrome.storage.local.set({
-    [PLATFORM_URL_STORAGE_KEY]: platformUrl,
-    [BACKEND_URL_STORAGE_KEY]: backendUrl
-  });
+  const { platformUrl, backendUrl } = await resolvePlatformAndBackendUrls();
+  const existing = await chrome.storage.local.get([
+    PLATFORM_DOCUMENT_NAMES_STORAGE_KEY,
+    PLATFORM_PROFILE_TEXT_STORAGE_KEY,
+    PLATFORM_PROFILE_STORAGE_KEY,
+    STRUCTURED_PROFILE_STORAGE_KEY
+  ]);
 
   const tab = await getPlatformTab(platformUrl);
   if (!tab?.id) {
+    setStatusState("error");
     setStatus("Platform tab not found. Open the platform first, then connect.");
-    updateFlowState({ hasPlatformOpen: false, hasConnectedProfile: false });
+    updateFlowState({ hasConnectedProfile: false });
     return;
   }
 
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    func: (profileKey, summaryKey, userIdKey) => {
+    func: (profileKey, summaryKey, userIdKey, docsKey) => {
       try {
         const profile = window.localStorage.getItem(profileKey) || "";
         const rawSummary = window.localStorage.getItem(summaryKey);
         const summary = rawSummary ? JSON.parse(rawSummary) : null;
         const explicitUserId = window.localStorage.getItem(userIdKey) || "";
+        const rawDocs = window.localStorage.getItem(docsKey);
+        let documentNames = [];
+        if (rawDocs) {
+          try {
+            const parsedDocs = JSON.parse(rawDocs);
+            if (Array.isArray(parsedDocs)) {
+              documentNames = parsedDocs
+                .map((item) => typeof item === "string" ? item : item?.filename)
+                .filter(Boolean);
+            }
+          } catch {
+            documentNames = [];
+          }
+        }
+        if (!documentNames.length) {
+          documentNames = Array.from(
+            document.querySelectorAll(".saved-document-name, .file-name")
+          ).map((node) => node.textContent?.trim() || "").filter(Boolean);
+        }
         const authKey = Object.keys(window.localStorage).find((key) => key.includes("-auth-token"));
         let userId = explicitUserId;
+        let accessToken = "";
         if (authKey) {
           try {
             const rawSession = window.localStorage.getItem(authKey);
             const parsedSession = rawSession ? JSON.parse(rawSession) : null;
             userId = explicitUserId || parsedSession?.user?.id || parsedSession?.currentSession?.user?.id || "";
+            accessToken = parsedSession?.access_token || parsedSession?.currentSession?.access_token || parsedSession?.session?.access_token || "";
           } catch {
             userId = explicitUserId;
           }
         }
-        return { profile, summary, userId };
+        return { profile, summary, userId, accessToken, documentNames };
       } catch (error) {
         return {
           profile: "",
           summary: null,
           userId: "",
+          accessToken: "",
+          documentNames: [],
           error: error instanceof Error ? error.message : "Could not read platform state."
         };
       }
     },
-    args: [PROFILE_STORAGE_KEY, PROFILE_SUMMARY_STORAGE_KEY, USER_ID_STORAGE_KEY]
+    args: [PROFILE_STORAGE_KEY, PROFILE_SUMMARY_STORAGE_KEY, USER_ID_STORAGE_KEY, SAVED_DOCUMENTS_STORAGE_KEY]
   });
 
   if (!result || result.error) {
+    setStatusState("error");
     setStatus(result?.error || "Could not read the platform profile.");
-    updateFlowState({ hasPlatformOpen: true, hasConnectedProfile: false });
+    updateFlowState({ hasConnectedProfile: false });
     return;
   }
 
-  if (!result.profile) {
-    setStatus("No uploaded-document profile was found yet. Upload documents in the platform first.");
-    renderProfileSummary(null, null);
-    updateFlowState({ hasPlatformOpen: true, hasConnectedProfile: false });
+  const hasSignedInContext = Boolean(result.userId || result.accessToken);
+  if (!result.profile && !hasSignedInContext) {
+    setStatusState("error");
+    setStatus("No uploaded-document profile or signed-in document context was found yet. Upload documents in the platform first.");
+    renderProfileSummary([]);
+    updateFlowState({ hasConnectedProfile: false });
     return;
   }
+
+  const documentNames = result.documentNames?.length
+    ? [...new Set(result.documentNames)]
+    : (existing[PLATFORM_DOCUMENT_NAMES_STORAGE_KEY] || []);
+
+  const profileText = result.profile || existing[PLATFORM_PROFILE_TEXT_STORAGE_KEY] || "";
 
   let structuredProfile = null;
-  let documentContextUsed = false;
 
   if (backendUrl) {
     try {
-      const syncResult = await syncStructuredProfile(backendUrl, result.profile, result.userId || "");
+      const syncResult = await syncStructuredProfile(backendUrl, profileText, result.userId || "", result.accessToken || "");
       structuredProfile = syncResult.structuredProfile;
-      documentContextUsed = syncResult.documentContextUsed;
     } catch (error) {
       console.warn("Structured profile sync failed", error);
     }
   }
 
+  if (!structuredProfile && profileText) {
+    structuredProfile = buildLocalStructuredProfile(profileText);
+  }
+
   await chrome.storage.local.set({
-    [PLATFORM_PROFILE_STORAGE_KEY]: result.summary,
-    [PLATFORM_PROFILE_TEXT_STORAGE_KEY]: result.profile,
+    [PLATFORM_PROFILE_STORAGE_KEY]: result.summary || existing[PLATFORM_PROFILE_STORAGE_KEY] || null,
+    [PLATFORM_PROFILE_TEXT_STORAGE_KEY]: profileText,
     [PLATFORM_USER_ID_STORAGE_KEY]: result.userId || "",
+    [PLATFORM_ACCESS_TOKEN_STORAGE_KEY]: result.accessToken || "",
+    [PLATFORM_DOCUMENT_NAMES_STORAGE_KEY]: documentNames,
     [STRUCTURED_PROFILE_STORAGE_KEY]: structuredProfile
   });
 
-  renderProfileSummary(result.summary, structuredProfile, { documentContextUsed });
-  updateFlowState({ hasPlatformOpen: true, hasConnectedProfile: true });
+  renderProfileSummary(documentNames);
+  updateFlowState({ hasConnectedProfile: true });
+  setStatusState(structuredProfile ? "success" : "idle");
   setStatus(structuredProfile
     ? "Connected and synced organization data successfully."
-    : "Connected to the platform profile. Backend sync can be retried later."
+    : "Connected to the platform account. Backend sync can be retried later."
   );
 }
 
@@ -464,6 +743,9 @@ function chooseAutofillTargets(fields) {
     if (blocked.has(field.fieldKey)) {
       return false;
     }
+    if (resolveFieldKeyForFill(field) === "unknown") {
+      return false;
+    }
     if (field.type === "checkbox" || field.type === "radio" || field.type === "password") {
       return false;
     }
@@ -476,16 +758,102 @@ function chooseAutofillTargets(fields) {
   });
 }
 
-function getStructuredValue(structuredProfile, fieldKey) {
+const SYNTHETIC_AI_FIELD_KEYS = new Set([
+  "project_title",
+  "project_summary",
+  "project_abstract",
+  "project_goals",
+  "need_statement",
+  "target_population",
+  "geographic_area_served",
+  "mission_statement",
+  "organization_description",
+  "organization_history",
+  "program_description",
+  "impact_statement",
+  "outcomes",
+  "evaluation_plan",
+  "sustainability_plan",
+  "implementation_timeline",
+  "methods_approach",
+  "staffing_plan",
+  "partnerships",
+  "dei_statement",
+  "financial_need",
+  "organizational_capacity",
+  "board_governance",
+  "success_metrics"
+]);
+
+function buildFieldTextBlob(field) {
+  return normalizeFillText([
+    field.label,
+    field.placeholder,
+    field.name,
+    field.id,
+    field.descriptor
+  ].filter(Boolean).join(" "));
+}
+
+function isRepeatedConfirmationField(field, resolvedFieldKey) {
+  const text = buildFieldTextBlob(field);
+  if (!text) {
+    return false;
+  }
+  const repeatedKey = new Set(["email", "phone", "mobile_phone", "contact_name", "first_name", "last_name"]);
+  return repeatedKey.has(resolvedFieldKey) && (
+    hasPhrase(text, "confirm") ||
+    hasPhrase(text, "re enter") ||
+    hasPhrase(text, "reenter") ||
+    hasPhrase(text, "repeat") ||
+    hasPhrase(text, "again") ||
+    hasPhrase(text, "verify")
+  );
+}
+
+function getStructuredValue(structuredProfile, fieldKey, field = {}) {
   if (!structuredProfile) {
     return "";
   }
 
+  const labelBlob = buildFieldTextBlob(field);
   const contactName = String(structuredProfile.contact_name || "").trim();
   const contactParts = contactName.split(/\s+/).filter(Boolean);
   const direct = structuredProfile[fieldKey];
   if (String(direct || "").trim()) {
     return String(direct).trim();
+  }
+
+  if (fieldKey === "address_line_1" && String(structuredProfile.address_line_1 || "").trim()) {
+    return String(structuredProfile.address_line_1).trim();
+  }
+
+  if (fieldKey === "address_line_2" && String(structuredProfile.address_line_2 || "").trim()) {
+    return String(structuredProfile.address_line_2).trim();
+  }
+
+  if (fieldKey === "city" && String(structuredProfile.city || "").trim()) {
+    return String(structuredProfile.city).trim();
+  }
+
+  if (fieldKey === "state" && String(structuredProfile.state || "").trim()) {
+    return String(structuredProfile.state).trim();
+  }
+
+  if (fieldKey === "zip" && String(structuredProfile.zip || "").trim()) {
+    return String(structuredProfile.zip).trim();
+  }
+
+  if (fieldKey === "country" && String(structuredProfile.country || "").trim()) {
+    return String(structuredProfile.country).trim();
+  }
+
+  if (fieldKey === "address_line_1" && (
+    labelBlob.includes("mailing address") ||
+    labelBlob.includes("organizational address") ||
+    labelBlob.includes("primary address")
+  )) {
+    return String(structuredProfile.address_line_1 || "").trim();
   }
 
   if (fieldKey === "mobile_phone" && structuredProfile.phone) {
@@ -503,10 +871,22 @@ function getStructuredValue(structuredProfile, fieldKey) {
   if (fieldKey === "contact_name") {
     const first = String(structuredProfile.first_name || "").trim();
     const last = String(structuredProfile.last_name || "").trim();
-    const full = [first, last].filter(Boolean).join(" ").trim();
+    const full = first && last ? `${first} ${last}` : "";
     if (full) {
       return full;
     }
+  }
+
+  if (fieldKey === "phone" && labelBlob.includes("primary") && String(structuredProfile.phone || "").trim()) {
+    return String(structuredProfile.phone).trim();
+  }
+
+  if (fieldKey === "email" && (
+    hasPhrase(labelBlob, "confirm email") ||
+    hasPhrase(labelBlob, "re enter email") ||
+    hasPhrase(labelBlob, "reenter email")
+  )) {
+    return String(structuredProfile.email || "").trim();
   }
 
   if (fieldKey === "organization_description" && structuredProfile.mission_statement) {
@@ -521,7 +901,7 @@ function sanitizeStructuredProfile(structuredProfile) {
     return null;
   }
 
-  const next = { ...structuredProfile };
+  const next = enrichStructuredProfileWithInferences(structuredProfile) || { ...structuredProfile };
   const trimValue = (key) => String(next[key] || "").trim();
   const clearIfUnsafe = (key, predicate) => {
     const value = trimValue(key);
@@ -574,13 +954,14 @@ function buildStructuredFills(fields, structuredProfile) {
     resolvedFieldKey: resolveFieldKeyForFill(field)
   }));
   const fills = [];
+  const chosenValuesByKey = new Map();
   const hasRequiredPrimaryPhone = resolvedFields.some((field) => field.resolvedFieldKey === "phone" && field.required);
   const phoneValue = String(safeStructuredProfile?.phone || "").trim();
   const mobileValue = String(safeStructuredProfile?.mobile_phone || "").trim();
 
   resolvedFields.forEach((field) => {
     const resolvedFieldKey = field.resolvedFieldKey || field.fieldKey;
-    let value = getStructuredValue(safeStructuredProfile, resolvedFieldKey);
+    let value = getStructuredValue(safeStructuredProfile, resolvedFieldKey, field);
 
     if (resolvedFieldKey === "phone" && !value && mobileValue) {
       value = mobileValue;
@@ -596,25 +977,36 @@ function buildStructuredFills(fields, structuredProfile) {
       }
     }
 
-    if (!value || !isSafeValueForFieldKey(resolvedFieldKey, value)) {
+    if (!value && isRepeatedConfirmationField(field, resolvedFieldKey)) {
+      value = chosenValuesByKey.get(resolvedFieldKey) || "";
+    }
+
+    const normalizedValue = normalizeValueForFieldKey(resolvedFieldKey, value);
+
+    if (!normalizedValue || !isSafeValueForFieldKey(resolvedFieldKey, normalizedValue)) {
       return;
     }
 
     fills.push({
       index: field.index,
-      value,
+      value: normalizedValue,
       confidence: field.required ? "high" : "medium",
       fieldKey: resolvedFieldKey
     });
+    chosenValuesByKey.set(resolvedFieldKey, normalizedValue);
   });
 
   return fills;
 }
 
 function buildQuestionText(field) {
+  if (field.label) {
+    return field.label;
+  }
+  if (field.placeholder) {
+    return field.placeholder;
+  }
   return [
-    field.label,
-    field.placeholder,
     field.name,
     field.id
   ].filter(Boolean).join(" | ");
@@ -638,6 +1030,67 @@ function inferFieldKeyFromText(text, fallbackKey) {
   const normalized = normalizeFillText(text);
   if (!normalized) {
     return fallbackKey;
+  }
+
+  if (
+    (hasPhrase(normalized, "re enter email address") ||
+      hasPhrase(normalized, "reenter email address") ||
+      hasPhrase(normalized, "confirm email address") ||
+      hasPhrase(normalized, "confirm email") ||
+      hasPhrase(normalized, "re enter e mail address") ||
+      hasPhrase(normalized, "reenter e mail address")) &&
+    (normalized.includes("email") || normalized.includes("e mail"))
+  ) {
+    return "email";
+  }
+
+  if (hasPhrase(normalized, "project title") || hasPhrase(normalized, "program title")) {
+    return "project_title";
+  }
+
+  if (hasPhrase(normalized, "mission statement") || hasPhrase(normalized, "organization mission")) {
+    return "mission_statement";
+  }
+
+  if (hasPhrase(normalized, "organization description") || hasPhrase(normalized, "about your organization")) {
+    return "organization_description";
+  }
+
+  if (
+    hasPhrase(normalized, "email address") ||
+    hasPhrase(normalized, "e mail address") ||
+    hasPhrase(normalized, "email") ||
+    hasPhrase(normalized, "e mail")
+  ) {
+    return "email";
+  }
+
+  if (hasPhrase(normalized, "contact name") || hasPhrase(normalized, "contact person") || hasPhrase(normalized, "primary contact")) {
+    return "contact_name";
+  }
+
+  if (hasPhrase(normalized, "first name")) {
+    return "first_name";
+  }
+
+  if (hasPhrase(normalized, "last name")) {
+    return "last_name";
+  }
+
+  if (hasPhrase(normalized, "title / position") || hasPhrase(normalized, "title position") || hasPhrase(normalized, "job title") || hasPhrase(normalized, "position")) {
+    return "job_title";
+  }
+
+  if (hasPhrase(normalized, "mobile phone") || hasPhrase(normalized, "cell phone")) {
+    return "mobile_phone";
+  }
+
+  if (hasPhrase(normalized, "phone")) {
+    return "phone";
+  }
+
+  if (hasPhrase(normalized, "website") || hasPhrase(normalized, "web site") || hasPhrase(normalized, "url")) {
+    return "website";
   }
 
   if (
@@ -680,38 +1133,6 @@ function inferFieldKeyFromText(text, fallbackKey) {
     return "address_line_1";
   }
 
-  if (hasPhrase(normalized, "website") || hasPhrase(normalized, "web site") || hasPhrase(normalized, "url")) {
-    return "website";
-  }
-
-  if (hasPhrase(normalized, "mission statement") || hasPhrase(normalized, "organization mission")) {
-    return "mission_statement";
-  }
-
-  if (hasPhrase(normalized, "organization description") || hasPhrase(normalized, "about your organization")) {
-    return "organization_description";
-  }
-
-  if (hasPhrase(normalized, "mobile phone") || hasPhrase(normalized, "cell phone")) {
-    return "mobile_phone";
-  }
-
-  if (hasPhrase(normalized, "phone")) {
-    return "phone";
-  }
-
-  if (hasPhrase(normalized, "email")) {
-    return "email";
-  }
-
-  if (hasPhrase(normalized, "first name")) {
-    return "first_name";
-  }
-
-  if (hasPhrase(normalized, "last name")) {
-    return "last_name";
-  }
-
   return fallbackKey;
 }
 
@@ -722,6 +1143,18 @@ function isLikelyEmail(value) {
 function isLikelyPhone(value) {
   const digits = String(value || "").replace(/\D/g, "");
   return digits.length >= 10 && digits.length <= 15;
+}
+
+function formatPhoneValue(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    const core = digits.slice(1);
+    return `(${core.slice(0, 3)}) ${core.slice(3, 6)}-${core.slice(6)}`;
+  }
+  return String(value || "").trim();
 }
 
 function isLikelyZip(value) {
@@ -750,7 +1183,75 @@ function isLikelyAddressValue(value) {
 
 function isLikelyNameValue(value) {
   const trimmed = String(value || "").trim();
-  return Boolean(trimmed) && !/\d/.test(trimmed) && /^[A-Za-z][A-Za-z\s.'-]{0,}$/.test(trimmed);
+  if (!trimmed || /\d/.test(trimmed) || !/^[A-Za-z][A-Za-z\s.'-]{0,}$/.test(trimmed)) {
+    return false;
+  }
+  const normalized = normalizeFillText(trimmed);
+  if (
+    normalized.includes("address") ||
+    normalized.includes("street") ||
+    normalized.includes("road") ||
+    normalized.includes("avenue") ||
+    normalized.includes("boulevard") ||
+    normalized.includes("drive") ||
+    normalized.includes("lane") ||
+    normalized.includes("suite") ||
+    normalized.includes("position") ||
+    normalized.includes("manager") ||
+    normalized.includes("director")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isLikelyFullName(value) {
+  const trimmed = String(value || "").trim();
+  if (!isLikelyNameValue(trimmed)) {
+    return false;
+  }
+  return trimmed.split(/\s+/).filter(Boolean).length >= 2;
+}
+
+function isLikelyJobTitle(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed || /\d{3,}/.test(trimmed) || trimmed.includes("@")) {
+    return false;
+  }
+  const normalized = normalizeFillText(trimmed);
+  return !(
+    normalized.includes("street") ||
+    normalized.includes("address") ||
+    normalized.includes("road") ||
+    normalized.includes("avenue") ||
+    normalized.includes("pittsburgh") ||
+    normalized.includes("united states")
+  );
+}
+
+function isLikelyOrganizationName(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed || trimmed.includes("@") || /^\d+$/.test(trimmed)) {
+    return false;
+  }
+  const normalized = normalizeFillText(trimmed);
+  return !(
+    normalized.includes("street") ||
+    normalized.includes("road") ||
+    normalized.includes("avenue") ||
+    normalized.includes("suite") ||
+    normalized.includes("unit") ||
+    normalized.includes("pittsburgh") ||
+    normalized.includes("united states")
+  );
+}
+
+function isLikelyProjectTitle(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed || trimmed.length < 4 || trimmed.includes("@")) {
+    return false;
+  }
+  return /[A-Za-z]/.test(trimmed);
 }
 
 function isSafeValueForFieldKey(fieldKey, value) {
@@ -791,11 +1292,18 @@ function isSafeValueForFieldKey(fieldKey, value) {
       return trimmed.length >= 2 && trimmed.length <= 120;
     case "first_name":
     case "last_name":
-    case "contact_name":
     case "principal_investigator_name":
     case "authorized_representative_name":
     case "executive_officer_name":
       return isLikelyNameValue(trimmed);
+    case "contact_name":
+      return isLikelyFullName(trimmed);
+    case "job_title":
+      return isLikelyJobTitle(trimmed);
+    case "organization_name":
+      return isLikelyOrganizationName(trimmed);
+    case "project_title":
+      return isLikelyProjectTitle(trimmed);
     case "website":
       return /^(https?:\/\/|www\.)/i.test(trimmed) || /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:\/.*)?$/.test(trimmed);
     case "ein":
@@ -809,7 +1317,43 @@ function isSafeValueForFieldKey(fieldKey, value) {
   }
 }
 
+function normalizeValueForFieldKey(fieldKey, value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  switch (fieldKey) {
+    case "phone":
+    case "mobile_phone":
+    case "fax":
+    case "principal_investigator_phone":
+    case "authorized_representative_phone":
+    case "executive_officer_phone":
+      return formatPhoneValue(trimmed);
+    case "email":
+    case "principal_investigator_email":
+    case "authorized_representative_email":
+    case "executive_officer_email":
+      return trimmed.toLowerCase();
+    default:
+      return trimmed;
+  }
+}
+
 function resolveFieldKeyForFill(field) {
+  const inputType = String(field.type || "").toLowerCase();
+  if (inputType === "email") {
+    return "email";
+  }
+  if (inputType === "tel") {
+    const mobileHint = normalizeFillText([field.label, field.placeholder, field.name, field.id].filter(Boolean).join(" "));
+    return mobileHint.includes("mobile") || mobileHint.includes("cell") ? "mobile_phone" : "phone";
+  }
+  if (inputType === "url") {
+    return "website";
+  }
+
   const directText = [
     field.label,
     field.placeholder,
@@ -817,6 +1361,9 @@ function resolveFieldKeyForFill(field) {
     field.id
   ].filter(Boolean).join(" ");
   const directMatch = inferFieldKeyFromText(directText, "");
+  if (field.fieldKey && field.fieldKey !== "unknown" && field.confidence >= 0.78 && !directMatch) {
+    return field.fieldKey;
+  }
   if (directMatch) {
     return directMatch;
   }
@@ -825,7 +1372,8 @@ function resolveFieldKeyForFill(field) {
 }
 
 function shouldUseAiFallback(field) {
-  const group = getFieldGroup(field.fieldKey);
+  const resolvedFieldKey = resolveFieldKeyForFill(field);
+  const group = getFieldGroup(resolvedFieldKey);
   const tagName = String(field.tagName || "").toLowerCase();
   const inputType = String(field.type || "").toLowerCase();
   const labelBlob = [field.label, field.placeholder, field.name, field.id, field.descriptor]
@@ -834,14 +1382,10 @@ function shouldUseAiFallback(field) {
     .toLowerCase();
 
   if (tagName === "textarea") {
-    return true;
+    return SYNTHETIC_AI_FIELD_KEYS.has(resolvedFieldKey);
   }
 
-  if (group === "Narrative" || group === "Budget") {
-    return true;
-  }
-
-  if (group === "Project" && inputType !== "date") {
+  if (SYNTHETIC_AI_FIELD_KEYS.has(resolvedFieldKey) && inputType !== "date") {
     return true;
   }
 
@@ -873,76 +1417,124 @@ async function requestBatchAutofillAnswers(backendUrl, payload) {
   return data.answers || [];
 }
 
+async function requestSingleAutofillAnswer(backendUrl, payload, field) {
+  const response = await fetch(`${backendUrl}/api/autofill-field`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...payload,
+      questionText: field.questionText,
+      fieldKey: field.fieldKey,
+      descriptor: field.descriptor,
+      tagName: field.tagName,
+      inputType: field.inputType
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || `Backend autofill failed: ${response.status}`);
+  }
+
+  return {
+    index: field.index,
+    fieldKey: data.normalizedFieldKey || field.fieldKey,
+    answer: data.answer || "",
+    confidence: data.confidence || "low",
+    rationale: data.rationale || ""
+  };
+}
+
+async function requestAutofillAnswers(backendUrl, payload) {
+  try {
+    return await requestBatchAutofillAnswers(backendUrl, payload);
+  } catch (error) {
+    console.warn("Batch autofill route unavailable, falling back to single-field generation.", error);
+    const answers = [];
+    for (const field of payload.fields) {
+      try {
+        answers.push(await requestSingleAutofillAnswer(backendUrl, payload, field));
+      } catch (singleError) {
+        console.warn("Single-field autofill failed", singleError);
+      }
+    }
+    return answers;
+  }
+}
+
 async function autofillCurrentPage() {
-  const platformUrl = platformUrlInput.value.trim().replace(/\/+$/, "");
-  const backendUrl = backendUrlInput.value.trim().replace(/\/+$/, "");
+  const { platformUrl, backendUrl } = await resolvePlatformAndBackendUrls();
 
   if (!backendUrl) {
     setStatus("Enter the backend URL first.");
     return;
   }
 
-  await chrome.storage.local.set({
-    [PLATFORM_URL_STORAGE_KEY]: platformUrl,
-    [BACKEND_URL_STORAGE_KEY]: backendUrl
-  });
-
   const saved = await chrome.storage.local.get([
     PLATFORM_PROFILE_STORAGE_KEY,
     PLATFORM_PROFILE_TEXT_STORAGE_KEY,
     PLATFORM_USER_ID_STORAGE_KEY,
+    PLATFORM_ACCESS_TOKEN_STORAGE_KEY,
     STRUCTURED_PROFILE_STORAGE_KEY
   ]);
 
   let profileSummary = saved[PLATFORM_PROFILE_STORAGE_KEY] || null;
   let profileText = saved[PLATFORM_PROFILE_TEXT_STORAGE_KEY] || "";
   let userId = saved[PLATFORM_USER_ID_STORAGE_KEY] || "";
+  let accessToken = saved[PLATFORM_ACCESS_TOKEN_STORAGE_KEY] || "";
   let structuredProfile = saved[STRUCTURED_PROFILE_STORAGE_KEY] || null;
 
-  if (!profileText) {
+  if (!profileText && !userId && !accessToken) {
     await connectToPlatform();
     const refreshed = await chrome.storage.local.get([
       PLATFORM_PROFILE_STORAGE_KEY,
       PLATFORM_PROFILE_TEXT_STORAGE_KEY,
       PLATFORM_USER_ID_STORAGE_KEY,
+      PLATFORM_ACCESS_TOKEN_STORAGE_KEY,
       STRUCTURED_PROFILE_STORAGE_KEY
     ]);
     profileSummary = refreshed[PLATFORM_PROFILE_STORAGE_KEY] || profileSummary;
     profileText = refreshed[PLATFORM_PROFILE_TEXT_STORAGE_KEY] || "";
     userId = refreshed[PLATFORM_USER_ID_STORAGE_KEY] || "";
+    accessToken = refreshed[PLATFORM_ACCESS_TOKEN_STORAGE_KEY] || "";
     structuredProfile = refreshed[STRUCTURED_PROFILE_STORAGE_KEY] || structuredProfile;
   }
 
-  if (!profileText) {
-    setStatus("No uploaded-document profile is available yet. Sync the platform first.");
-    updateFlowState({ hasPlatformOpen: Boolean(platformUrl), hasConnectedProfile: false });
+  if (!profileText && !userId && !accessToken) {
+    setStatusState("error");
+    setStatus("No uploaded-document profile or signed-in document context is available yet. Sync the platform first.");
+    updateFlowState({ hasConnectedProfile: false });
     return;
   }
 
   if (!structuredProfile) {
     try {
-      const syncResult = await syncStructuredProfile(backendUrl, profileText, userId);
+      const syncResult = await syncStructuredProfile(backendUrl, profileText, userId, accessToken);
       structuredProfile = syncResult.structuredProfile;
       await chrome.storage.local.set({
         [STRUCTURED_PROFILE_STORAGE_KEY]: structuredProfile
       });
-      renderProfileSummary(profileSummary, structuredProfile, { documentContextUsed: syncResult.documentContextUsed });
+      const refreshedSummary = await chrome.storage.local.get([PLATFORM_DOCUMENT_NAMES_STORAGE_KEY]);
+      renderProfileSummary(refreshedSummary[PLATFORM_DOCUMENT_NAMES_STORAGE_KEY] || []);
     } catch (error) {
       console.warn("Late structured profile sync failed", error);
     }
   }
 
-  updateFlowState({ hasPlatformOpen: true, hasConnectedProfile: true });
+  updateFlowState({ hasConnectedProfile: true });
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
+    setStatusState("error");
     setStatus("Could not find the active tab.");
     return;
   }
 
+  setStatusState("working");
   setStatus("Analyzing the current page and matching profile data...");
   const scanResponse = await prepareCurrentPage(tab.id);
   if (!scanResponse) {
+    setStatusState("error");
     setStatus("This page did not respond. Refresh the page and try again.");
     return;
   }
@@ -950,6 +1542,7 @@ async function autofillCurrentPage() {
   const targets = chooseAutofillTargets(scanResponse.fields || []);
   if (!targets.length) {
     renderFields(scanResponse);
+    setStatusState("error");
     setStatus("No supported autofill targets were detected on this page.");
     return;
   }
@@ -961,9 +1554,10 @@ async function autofillCurrentPage() {
     .filter((field) => shouldUseAiFallback(field));
 
   if (aiTargets.length) {
+    setStatusState("working");
     setStatus(`Using uploaded documents to draft ${aiTargets.length} additional answer${aiTargets.length === 1 ? "" : "s"}...`);
     try {
-      const answers = await requestBatchAutofillAnswers(backendUrl, {
+      const answers = await requestAutofillAnswers(backendUrl, {
         fields: aiTargets.map((field) => ({
           index: field.index,
           fieldKey: resolveFieldKeyForFill(field),
@@ -976,15 +1570,17 @@ async function autofillCurrentPage() {
         pageUrl: scanResponse.url,
         organizationProfile: profileText,
         grantContext: "",
-        userId
+        userId,
+        accessToken
       });
 
       answers.forEach((answer) => {
         const resolvedFieldKey = answer.fieldKey || "unknown";
-        if (answer.answer && answer.confidence !== "low" && isSafeValueForFieldKey(resolvedFieldKey, answer.answer)) {
+        const normalizedAnswer = normalizeValueForFieldKey(resolvedFieldKey, answer.answer);
+        if (normalizedAnswer && answer.confidence !== "low" && isSafeValueForFieldKey(resolvedFieldKey, normalizedAnswer)) {
           fills.push({
             index: answer.index,
-            value: answer.answer,
+            value: normalizedAnswer,
             confidence: answer.confidence || "medium",
             fieldKey: resolvedFieldKey
           });
@@ -997,6 +1593,7 @@ async function autofillCurrentPage() {
 
   if (!fills.length) {
     renderFields(scanResponse);
+    setStatusState("error");
     setStatus("No safe autofill values were generated. Review the highlighted fields for manual mapping.");
     return;
   }
@@ -1008,29 +1605,41 @@ async function autofillCurrentPage() {
 
   renderFields(scanResponse);
   if (!fillResponse) {
+    setStatusState("error");
     setStatus("Autofill values were prepared, but the page could not be updated.");
     return;
   }
 
   const applied = fillResponse.applied?.length || 0;
   const skipped = fillResponse.skipped?.length || 0;
+  setStatusState(applied > 0 ? "success" : "error");
   setStatus(`Autofilled ${applied} field${applied === 1 ? "" : "s"} from uploaded-document context. ${skipped ? `${skipped} still need review.` : "Review highlights for any remaining fields."}`);
 }
 
 autofillButton.addEventListener("click", () => {
   autofillCurrentPage().catch((error) => {
     console.error(error);
+    setStatusState("error");
     setStatus("Could not autofill this page.");
   });
 });
 
 openPlatformButton.addEventListener("click", () => {
-  chrome.tabs.create({ url: platformUrlInput.value.trim() || "http://localhost:5173" });
+  resolvePlatformAndBackendUrls()
+    .then(({ platformUrl }) => {
+      chrome.tabs.create({ url: platformUrl || DEFAULT_PLATFORM_URL });
+    })
+    .catch(() => {
+      chrome.tabs.create({ url: DEFAULT_PLATFORM_URL });
+    });
 });
 
 connectPlatformButton.addEventListener("click", () => {
+  setStatusState("working");
+  setStatus("Syncing uploaded documents from GrantFlow...");
   connectToPlatform().catch((error) => {
     console.error(error);
+    setStatusState("error");
     setStatus("Could not connect to the platform.");
   });
 });

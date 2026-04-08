@@ -2,7 +2,7 @@
   display: flex;
   width: 100%;
   min-height: 100vh;
-  background: #f9fafb;
+  background: transparent;
 }
 
 .main-container {
@@ -15,7 +15,7 @@
 .content-area {
   flex: 1;
   margin-top: 70px;
-  padding: 2rem;
+  padding: 2.25rem;
   overflow-y: auto;
 }
 

@@ -232,11 +232,11 @@ export default function SearchView({ organizationProfile = '' }: SearchViewProps
 
   return (
     <div className="empty-state search-view">
-      <div className="empty-state-icon">🔍</div>
-      <h2 className="empty-state-title">Discover Grants Tailored to Your Mission</h2>
+      <p className="search-kicker">Grant search</p>
+      <h2 className="empty-state-title">Find grants that better match your organization</h2>
       <p className="empty-state-description">
-        Search through thousands of grant opportunities matched to your organization's
-        uploaded profile. Results are now re-ranked using the mission, activities, and themes found in your documents.
+        Search across opportunities using your uploaded organization profile as context.
+        Results are re-ranked using the mission, activities, and themes found in your documents.
       </p>
 
       <div className="search-bar">
@@ -406,24 +406,24 @@ export default function SearchView({ organizationProfile = '' }: SearchViewProps
         </button>
       </div>
 
-      <div className="feature-grid">
+      <div className="feature-grid search-feature-grid">
         <div className="feature-card">
-          <div className="feature-icon">🤖</div>
-          <h3 className="feature-title">Profile-Aware Matching</h3>
+          <div className="feature-index">01</div>
+          <h3 className="feature-title">Profile-aware matching</h3>
           <p className="feature-text">
             Uploaded-document themes now influence search terms and result ranking.
           </p>
         </div>
         <div className="feature-card">
-          <div className="feature-icon">⚡</div>
-          <h3 className="feature-title">Faster Shortlisting</h3>
+          <div className="feature-index">02</div>
+          <h3 className="feature-title">Faster shortlisting</h3>
           <p className="feature-text">
             Prioritize grants that align more closely with your mission and activities.
           </p>
         </div>
         <div className="feature-card">
-          <div className="feature-icon">📊</div>
-          <h3 className="feature-title">Better Context</h3>
+          <div className="feature-index">03</div>
+          <h3 className="feature-title">Shared context</h3>
           <p className="feature-text">
             Use the same uploaded profile for search, grant Q&A, and extension autofill.
           </p>

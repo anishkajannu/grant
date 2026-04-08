@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Anishka Autofill</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <p class="eyebrow">Chrome Extension</p>
+      <h1>Anishka Autofill</h1>
+      <p class="subtitle">Fill common application and signup fields with your saved profile in one click.</p>
+
+      <section class="profile-card">
+        <p><strong>Name:</strong> Anishka Jannu</p>
+        <p><strong>Email:</strong> anishkajannu@gmail.com</p>
+        <p><strong>Phone:</strong> 5104585877</p>
+        <p><strong>College:</strong> Carnegie Mellon University</p>
+      </section>
+
+      <div class="actions">
+        <button id="fill-button" type="button">Autofill current page</button>
+        <button id="scan-button" type="button" class="button-secondary">Scan fields</button>
+      </div>
+
+      <p id="status" class="status">Ready.</p>
+      <div id="results" class="results"></div>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+  </html>

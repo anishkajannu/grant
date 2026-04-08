@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GrantFlow Investor Deck</title>
+  <style>
+    :root {
+      --bg: #0d1326;
+      --panel: #141d38;
+      --panel-soft: #1a2649;
+      --text: #f5f7ff;
+      --muted: #b8c1df;
+      --line: rgba(255, 255, 255, 0.12);
+      --purple: #7c62ff;
+      --violet: #9b7cff;
+      --blue: #4dc4ff;
+      --green: #42d7a2;
+      --pink: #ff7bc5;
+      --shadow: 0 24px 80px rgba(5, 9, 20, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Inter", "Avenir Next", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(124, 98, 255, 0.28), transparent 28%),
+        radial-gradient(circle at top right, rgba(77, 196, 255, 0.18), transparent 25%),
+        linear-gradient(180deg, #0d1326 0%, #0a1020 100%);
+      color: var(--text);
+      padding: 40px;
+    }
+
+    .deck {
+      max-width: 1120px;
+      margin: 0 auto;
+      display: grid;
+      gap: 28px;
+    }
+
+    .deck-header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 8px 4px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .deck-header h1 {
+      margin: 0;
+      font-size: 2.6rem;
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    .deck-header p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 720px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(124, 98, 255, 0.45);
+      background: rgba(124, 98, 255, 0.12);
+      color: #e7e0ff;
+      font-size: 0.92rem;
+      white-space: nowrap;
+    }
+
+    .slide {
+      position: relative;
+      min-height: 630px;
+      padding: 42px;
+      border-radius: 28px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+        var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .slide::after {
+      content: "";
+      position: absolute;
+      inset: auto -90px -90px auto;
+      width: 260px;
+      height: 260px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(124, 98, 255, 0.28), transparent 68%);
+      pointer-events: none;
+    }
+
+    .slide-num {
+      color: var(--violet);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.78rem;
+    }
+
+    .slide h2 {
+      margin: 12px 0 10px;
+      font-size: 2.5rem;
+      line-height: 1.02;
+      letter-spacing: -0.05em;
+      max-width: 780px;
+    }
+
+    .subtitle {
+      margin: 0 0 28px;
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 720px;
+      line-height: 1.55;
+    }
+
+    .hero-grid,
+    .two-col,
+    .three-col {
+      display: grid;
+      gap: 22px;
+    }
+
+    .hero-grid,
+    .two-col {
+      grid-template-columns: 1.15fr 0.85fr;
+    }
+
+    .three-col {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .panel,
+    .metric,
+    .quote,
+    .timeline-step {
+      background: var(--panel-soft);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 22px;
+    }
+
+    .hero-title {
+      font-size: 4.4rem;
+      line-height: 0.92;
+      letter-spacing: -0.07em;
+      margin: 0 0 18px;
+      max-width: 580px;
+    }
+
+    .gradient-text {
+      background: linear-gradient(90deg, #f6f4ff 0%, #a88eff 40%, #72d7ff 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .hero-copy {
+      font-size: 1.12rem;
+      line-height: 1.6;
+      color: var(--muted);
+      max-width: 580px;
+    }
+
+    .kicker {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(66, 215, 162, 0.12);
+      border: 1px solid rgba(66, 215, 162, 0.4);
+      color: #c7ffec;
+      font-size: 0.9rem;
+      margin-bottom: 18px;
+    }
+
+    .list {
+      margin: 0;
+      padding-left: 20px;
+      display: grid;
+      gap: 12px;
+      color: var(--text);
+      line-height: 1.45;
+      font-size: 1rem;
+    }
+
+    .list strong {
+      color: #fff;
+    }
+
+    .metric-value {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      margin: 0 0 8px;
+    }
+
+    .metric-label {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .step-grid {
+      display: grid;
+      gap: 16px;
+      margin-top: 14px;
+    }
+
+    .timeline-step {
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .step-index {
+      width: 54px;
+      height: 54px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      font-size: 1.1rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, rgba(124, 98, 255, 0.3), rgba(77, 196, 255, 0.22));
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .step-title {
+      margin: 2px 0 6px;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .step-copy {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .tag {
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #eef1ff;
+      font-size: 0.92rem;
+    }
+
+    .quote {
+      position: relative;
+      padding-top: 30px;
+    }
+
+    .quote::before {
+      content: "“";
+      position: absolute;
+      top: 4px;
+      left: 18px;
+      font-size: 3rem;
+      color: rgba(255, 255, 255, 0.18);
+      line-height: 1;
+    }
+
+    .quote p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.08rem;
+      line-height: 1.65;
+    }
+
+    .footer-note {
+      margin-top: 24px;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 0.82rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .cta-box {
+      display: grid;
+      gap: 16px;
+      padding: 26px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, rgba(124, 98, 255, 0.22), rgba(77, 196, 255, 0.12));
+      border: 1px solid rgba(168, 142, 255, 0.38);
+    }
+
+    @media (max-width: 900px) {
+      body {
+        padding: 18px;
+      }
+
+      .hero-grid,
+      .two-col,
+      .three-col {
+        grid-template-columns: 1fr;
+      }
+
+      .slide {
+        padding: 28px;
+        min-height: auto;
+      }
+
+      .hero-title {
+        font-size: 3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck">
+    <header class="deck-header">
+      <div>
+        <h1>GrantFlow Investor Deck</h1>
+        <p>Investor-style narrative, visual system, and slide copy designed to paste directly into Google Slides or present from this file.</p>
+      </div>
+      <div class="badge">Theme: Purple / Indigo / Mission-first</div>
+    </header>
+
+    <section class="slide">
+      <div class="slide-num">Slide 1</div>
+      <div class="hero-grid">
+        <div>
+          <div class="kicker">AI for nonprofit grant workflows</div>
+          <h2 class="hero-title"><span class="gradient-text">GrantFlow</span><br />Cuts the hours nonprofits spend applying for grants.</h2>
+          <p class="hero-copy">
+            GrantFlow helps nonprofits identify the right grants faster and complete applications faster using their own organizational documents and profile.
+          </p>
+          <div class="tag-row">
+            <span class="tag">Personalized grant discovery</span>
+            <span class="tag">Document-grounded autofill</span>
+            <span class="tag">Portal-native workflow</span>
+          </div>
+        </div>
+        <div class="quote">
+          <p>The bottleneck is not just writing answers. It is finding the right grants, gathering the right information, and repeating the same work across every portal.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-num">Slide 2</div>
+      <h2>Nonprofits waste too many hours finding and filling out grants.</h2>
+      <p class="subtitle">The process is manual at both ends: discovery and application.</p>
+      <div class="three-col">
+        <div class="panel">
+          <h3>Finding grants</h3>
+          <ul class="list">
+            <li>Teams sift through long grant lists to figure out what is actually relevant.</li>
+            <li>There is no fast way to personalize search to the organization’s mission and profile.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Preparing applications</h3>
+          <ul class="list">
+            <li>Important information is buried across PDFs, tax forms, annual reports, and incorporation docs.</li>
+            <li>The same facts are re-entered again and again in different formats.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Operational cost</h3>
+          <ul class="list">
+            <li>Small nonprofits often do not have dedicated grant staff.</li>
+            <li>Every avoidable hour spent on grants is time taken away from the mission.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-num">Slide 3</div>
+      <h2>Why ChatGPT or Claude alone is not enough</h2>
+      <p class="subtitle">General-purpose AI helps with writing. It does not solve the full grant workflow.</p>
+      <div class="three-col">
+        <div class="metric">
+          <p class="metric-value">No discovery layer</p>
+          <p class="metric-label">A chatbot does not help teams quickly identify which grants are actually personalized to their organization.</p>
+        </div>
+        <div class="metric">
+          <p class="metric-value">No workflow memory</p>
+          <p class="metric-label">Users still have to upload documents manually, re-prompt, and copy-paste answers across forms.</p>
+        </div>
+        <div class="metric">
+          <p class="metric-value">No in-portal execution</p>
+          <p class="metric-label">A chatbot does not sit inside grant portals and safely autofill fields where the work actually happens.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-num">Slide 4</div>
+      <h2>GrantFlow is a grant workflow product, not just a writing tool.</h2>
+      <p class="subtitle">We reduce time at both stages: finding the right opportunities and completing the application.</p>
+      <div class="step-grid">
+        <div class="timeline-step">
+          <div class="step-index">1</div>
+          <div>
+            <p class="step-title">Upload documents</p>
+            <p class="step-copy">Users upload nonprofit documents once so the system can understand the organization.</p>
+          </div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-index">2</div>
+          <div>
+            <p class="step-title">Generate an organization profile</p>
+            <p class="step-copy">GrantFlow structures key organizational context into a reusable profile layer.</p>
+          </div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-index">3</div>
+          <div>
+            <p class="step-title">Find personalized grants</p>
+            <p class="step-copy">The platform helps surface grants that better match the organization’s profile, mission, and likely eligibility.</p>
+          </div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-index">4</div>
+          <div>
+            <p class="step-title">Autofill applications</p>
+            <p class="step-copy">The extension fills repetitive factual fields and drafts longer answers grounded in uploaded documents.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-num">Slide 5</div>
+      <h2>The core wedge: personalized grant discovery + application acceleration</h2>
+      <p class="subtitle">Most tools focus on drafting. GrantFlow solves the higher-value workflow before and after drafting.</p>
+      <div class="two-col">
+        <div class="panel">
+          <h3>Before the application</h3>
+          <ul class="list">
+            <li><strong>Document upload:</strong> centralize nonprofit materials in one place.</li>
+            <li><strong>Profile generation:</strong> build a reusable organizational context layer.</li>
+            <li><strong>Grant search:</strong> narrow down grants based on who the organization is, not just keyword search.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>During the application</h3>
+          <ul class="list">
+            <li><strong>Field detection:</strong> identify relevant fields across grant portals.</li>
+            <li><strong>Safe autofill:</strong> fill repetitive factual data only when confidence is strong.</li>
+            <li><strong>Document-grounded drafting:</strong> generate longer responses using the nonprofit’s own materials.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-num">Slide 6</div>
+      <h2>Why GrantFlow is different</h2>
+      <p class="subtitle">Our edge is not just AI output quality. It is workflow leverage.</p>
+      <div class="three-col">
+        <div class="panel">
+          <h3>It saves search time</h3>
+          <p class="metric-label">GrantFlow helps users spend less time sorting through irrelevant opportunities.</p>
+        </div>
+        <div class="panel">
+          <h3>It saves completion time</h3>
+          <p class="metric-label">The extension reduces repetitive data entry directly inside real grant portals.</p>
+        </div>
+        <div class="panel">
+          <h3>It is grounded</h3>
+          <p class="metric-label">Responses are based on uploaded organization documents, not generic chatbot memory.</p>
+        </div>
+      </div>
+      <div class="footer-note">Core moat: profile-aware discovery + document-grounded execution</div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-num">Slide 7</div>
+      <h2>Who this is for</h2>
+      <p class="subtitle">We start where grant friction is highest and staff bandwidth is lowest.</p>
+      <div class="two-col">
+        <div class="panel">
+          <h3>Initial users</h3>
+          <ul class="list">
+            <li>Small and midsize nonprofits</li>
+            <li>Development teams</li>
+            <li>Grant writers and consultants</li>
+            <li>Community organizations and schools</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Why they care</h3>
+          <ul class="list">
+            <li>They need more grant throughput without hiring more people.</li>
+            <li>They need help deciding which grants are worth pursuing.</li>
+            <li>They need a repeatable source of truth for organization information.</li>
+            <li>They need speed without sacrificing accuracy.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-num">Slide 8</div>
+      <h2>Business model</h2>
+      <p class="subtitle">Simple SaaS expansion from single-org workflows to multi-user and multi-client plans.</p>
+      <div class="three-col">
+        <div class="metric">
+          <p class="metric-value">Starter</p>
+          <p class="metric-label">Single-organization plan for profile generation, grant discovery, and autofill support.</p>
+        </div>
+        <div class="metric">
+          <p class="metric-value">Team</p>
+          <p class="metric-label">Shared workflows, multi-user collaboration, and larger document and usage limits.</p>
+        </div>
+        <div class="metric">
+          <p class="metric-value">Pro / B2B</p>
+          <p class="metric-label">Consultant, institutional, and partnership plans for high-volume grant operations.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-num">Slide 9</div>
+      <h2>What exists today</h2>
+      <p class="subtitle">This is already a workflow prototype, not just a concept deck.</p>
+      <div class="two-col">
+        <div class="panel">
+          <h3>Working pieces</h3>
+          <ul class="list">
+            <li>Document upload and text extraction</li>
+            <li>Organization profile generation</li>
+            <li>Saved document management</li>
+            <li>Grant finder driven by organization profile</li>
+            <li>Chrome extension field detection and autofill</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Why it matters</h3>
+          <ul class="list">
+            <li>The product already addresses both major time sinks: finding grants and filling applications.</li>
+            <li>The remaining work is hardening, accuracy, and broader portal coverage.</li>
+            <li>The underlying user value proposition is already clear.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-num">Slide 10</div>
+      <h2>Vision</h2>
+      <p class="subtitle">Become the default grant workflow layer for nonprofits.</p>
+      <div class="cta-box">
+        <p class="metric-value" style="font-size: 2rem; margin: 0;">GrantFlow helps nonprofits spend less time applying and more time winning funding.</p>
+        <ul class="list">
+          <li><strong>Ask:</strong> pilot partners, user feedback, and early support.</li>
+          <li><strong>Near-term:</strong> improve search quality, autofill accuracy, and portal coverage.</li>
+          <li><strong>Long-term:</strong> own the reusable organization profile layer for grant applications.</li>
+        </ul>
+      </div>
+      <div class="footer-note">GrantFlow • AI for nonprofit funding workflows</div>
+    </section>
+  </main>
+</body>
+</html>

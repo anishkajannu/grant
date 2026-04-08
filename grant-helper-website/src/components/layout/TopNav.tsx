@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../../config/supabase';
+import { isSupabaseConfigured, supabase } from '../../config/supabase';
 import './TopNav.css';
 
 interface TopNavProps {
@@ -18,11 +18,18 @@ export default function TopNav({ currentView }: TopNavProps) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setSessionLabel('Local mode');
+      setSessionReady(false);
+      return;
+    }
+
+    const client = supabase;
     let mounted = true;
 
     const syncSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await client.auth.getSession();
         if (!mounted) return;
         const userId = session?.user?.id || '';
         if (userId) {
@@ -41,7 +48,7 @@ export default function TopNav({ currentView }: TopNavProps) {
 
     syncSession();
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = client.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       const userId = session?.user?.id || '';
       if (userId) {
@@ -60,6 +67,11 @@ export default function TopNav({ currentView }: TopNavProps) {
   }, []);
 
   const handleConnect = async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      setSessionLabel('Supabase not configured');
+      return;
+    }
+
     setBusy(true);
     try {
       const { error } = await supabase.auth.signInAnonymously();
@@ -103,12 +115,7 @@ export default function TopNav({ currentView }: TopNavProps) {
               </button>
             )}
           </div>
-          <button className="icon-button" title="Notifications">
-            🔔
-          </button>
-          <button className="icon-button" title="Help">
-            ❓
-          </button>
+          <div className="topnav-meta">Workspace</div>
         </div>
       </div>
     </header>
