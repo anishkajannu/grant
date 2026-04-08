@@ -272,17 +272,23 @@ export default function ProfileView({onOrganizationProfileChange,
         )}
         <div className="profile-landing-grid">
           <div className="profile-landing-main">
-            <p className="profile-hero-kicker">Organization profile</p>
-            <h2 className="empty-state-title">Create Your Organization Profile</h2>
-            <p className="empty-state-description">
-              Upload the documents your team already uses so GrantFlow can organize core information,
-              surface better-fit opportunities, and reduce repetitive application work.
-            </p>
-            <div className="empty-state-actions">
-              <button className="btn-primary" onClick={() => setShowUpload(true)}>
-                Upload documents
-              </button>
-              <button className="btn-secondary">Import from EIN</button>
+            <div className="profile-landing-panel">
+              <p className="profile-hero-kicker">Organization profile</p>
+              <h2 className="empty-state-title">Build your grant-ready organization profile</h2>
+              <p className="empty-state-description">
+                Upload the files your team already maintains so GrantFlow can organize the details that
+                repeat across grant search, drafting, and applications.
+              </p>
+              <div className="empty-state-actions">
+                <button className="btn-primary" onClick={() => setShowUpload(true)}>
+                  Upload documents
+                </button>
+                <button className="btn-secondary">Import from EIN</button>
+              </div>
+              <p className="profile-landing-note">
+                Start with incorporation documents, tax filings, annual reports, and any materials that
+                describe your mission and programs.
+              </p>
             </div>
           </div>
 
@@ -325,9 +331,10 @@ export default function ProfileView({onOrganizationProfileChange,
           ← Back
         </button>
         <div>
-          <h2 className="upload-title">Upload Your Nonprofit's Legal Documents</h2>
+          <p className="profile-hero-kicker">Upload documents</p>
+          <h2 className="upload-title">Bring your core documents into one place</h2>
           <p className="upload-subtitle">
-            Our AI will read your files to understand your organization and pre-fill your grant applications.
+            GrantFlow reads the materials you already have, extracts reusable details, and prepares them for grant search and application support.
           </p>
         </div>
       </div>

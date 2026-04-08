@@ -1,7 +1,7 @@
 /* Global Styles */
 :root {
   font-family: "Avenir Next", "Segoe UI", "Inter", sans-serif;
-  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --font-display: "Georgia", "Times New Roman", serif;
   line-height: 1.5;
   font-weight: 400;
   color-scheme: light;
@@ -87,23 +87,4 @@ button:focus-visible {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #111827;
-    color: #f9fafb;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: #1f2937;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: #4b5563;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: #6b7280;
-  }
 }

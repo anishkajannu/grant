@@ -96,12 +96,15 @@ export default function TopNav({ currentView }: TopNavProps) {
   return (
     <header className="topnav">
       <div className="topnav-content">
-        <h2 className="topnav-title">{viewTitles[currentView] || 'GrantFlow'}</h2>
+        <div className="topnav-brand">
+          <p className="topnav-eyebrow">Grant workflow system</p>
+          <h2 className="topnav-title">GrantFlow</h2>
+        </div>
 
         <div className="topnav-actions">
           <div className={`auth-status ${sessionReady ? 'auth-status--connected' : ''}`}>
             <div className="auth-status-copy">
-              <span className="auth-status-label">Account</span>
+              <span className="auth-status-label">{sessionReady ? 'Account' : 'Sign in to sync documents'}</span>
               <span className="auth-status-value">{sessionLabel}</span>
             </div>
             {!sessionReady && (
@@ -110,12 +113,13 @@ export default function TopNav({ currentView }: TopNavProps) {
                 className="auth-status-button"
                 onClick={handleConnect}
                 disabled={busy}
+                aria-label="Connect your account"
               >
-                {busy ? 'Connecting...' : 'Connect'}
+                {busy ? 'Connecting...' : 'Sign in / Connect'}
               </button>
             )}
           </div>
-          <div className="topnav-meta">Workspace</div>
+          <div className="topnav-meta">{viewTitles[currentView] || 'Workspace'}</div>
         </div>
       </div>
     </header>
