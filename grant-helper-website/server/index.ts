@@ -153,14 +153,18 @@ function getFieldSpecificGuidance(fieldKey: string): string {
       return 'Expect the legal or common organization name only.';
     case 'project_title':
       return 'Expect a short, descriptive project or program title. If not explicit, you may synthesize a truthful title grounded in the mission and activities.';
+    case 'need_statement':
+      return 'Explain the specific problem, why it matters now, and why funding is needed. Use full sentences and make the urgency clear without exaggeration.';
+    case 'target_population':
+      return 'Explain who benefits, how the organization identifies them, and how it reaches or recruits them. Use full sentences, not a short fragment.';
+    case 'organizational_capacity':
+      return 'Explain what makes the organization or program effective compared with other approaches. Use full sentences and cite relevant strengths from the context.';
     case 'mission_statement':
     case 'organization_description':
     case 'organization_history':
     case 'project_summary':
     case 'project_abstract':
     case 'project_goals':
-    case 'need_statement':
-    case 'target_population':
     case 'geographic_area_served':
     case 'program_description':
     case 'impact_statement':
@@ -173,10 +177,9 @@ function getFieldSpecificGuidance(fieldKey: string): string {
     case 'partnerships':
     case 'dei_statement':
     case 'financial_need':
-    case 'organizational_capacity':
     case 'board_governance':
     case 'success_metrics':
-      return 'This is a narrative-style field. Use the document context to draft a concise, professional answer if the mission/program details are present.';
+      return 'This is a narrative-style field. Draft a polished, professional response in full sentences. Address every part of the question, not just the opening phrase, and expand enough to be useful in a grant application.';
     default:
       return '';
   }
@@ -333,7 +336,9 @@ Return strict JSON only with keys: normalizedFieldKey, answer, confidence, ratio
 - rationale should be one short sentence.
 - answer should be ready to paste into the field.
 - For short text inputs, keep the answer short.
-- For textarea questions, answer in one concise paragraph.
+- For textarea questions, answer in full sentences and address every part of the prompt.
+- When the question asks multiple things, cover each one clearly in the same answer.
+- For narrative questions, prefer 2-5 complete sentences unless the prompt clearly needs something shorter.
 - Do not guess a person's first or last name from an organization name.
 - For factual identity fields, only answer if the value is explicitly present in context.
 - Treat contact, email, phone, website, address, city, state, zip, country, EIN, UEI, DUNS, and job title as factual fields.
@@ -688,6 +693,9 @@ Rules:
 - You may synthesize wording only for narrative-style fields and project_title.
 - For project_title, if the mission/program context is clear but no exact title exists, you may create a short, truthful title grounded in the described work.
 - For narrative and organization-description fields, write a concise grant-ready answer in one paragraph.
+- For narrative and organization-description fields, write polished grant-ready prose in full sentences.
+- When a field asks who is served and how the organization identifies or reaches them, answer both parts explicitly.
+- When a field asks about mission, history, and community need, answer all three parts explicitly.
 - For short text fields, keep the answer short.
 - If a field should be skipped, return answer as an empty string with low confidence.
 - fieldKey must stay the same as provided unless it is blank, in which case return "unknown".

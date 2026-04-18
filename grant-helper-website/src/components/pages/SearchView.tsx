@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { searchOpportunities, getOpportunityUrl, buildGrantContext, isGrantApiConfigured, type GrantsGovOpportunity } from '../../api/grantsGov';
 import GrantChat from '../chat/GrantChat';
 import './EmptyState.css';
@@ -156,8 +156,25 @@ function formatCurrency(value?: number): string {
   }).format(value);
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
+function stripHtml(value: string): string {
+  return decodeHtmlEntities(value)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function truncateSummary(value?: string, maxLength = 240): string {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  const text = stripHtml(String(value || ''));
   if (!text) {
     return 'No summary description available yet.';
   }
@@ -193,16 +210,24 @@ export default function SearchView({ organizationProfile = '' }: SearchViewProps
   const [opportunities, setOpportunities] = useState<GrantsGovOpportunity[]>([]);
   const [selectedOpportunity, setSelectedOpportunity] = useState<GrantsGovOpportunity | null>(null);
   const [lastSearchLabel, setLastSearchLabel] = useState('');
+  const resultsRef = useRef<HTMLDivElement | null>(null);
 
   const profileKeywords = useMemo(() => extractProfileKeywords(organizationProfile), [organizationProfile]);
   const recommendedQuery = useMemo(() => buildRecommendedQuery(organizationProfile), [organizationProfile]);
   const hasProfile = organizationProfile.trim().length > 0;
   const grantApiConfigured = isGrantApiConfigured();
 
+  useEffect(() => {
+    if (opportunities.length > 0) {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [opportunities]);
+
   const runSearch = async (mode: 'manual' | 'recommended') => {
     setLoading(true);
     setError(null);
     setOpportunities([]);
+    setSelectedOpportunity(null);
 
     if (!grantApiConfigured) {
       setError('Grant search is not configured yet. Add VITE_GRANT_API to grant-helper-website/.env, then restart the frontend.');
@@ -213,6 +238,8 @@ export default function SearchView({ organizationProfile = '' }: SearchViewProps
     const baseQuery = mode === 'recommended'
       ? recommendedQuery
       : (query.trim() || recommendedQuery);
+
+    setQuery(baseQuery);
 
     try {
       const result = await searchOpportunities({
@@ -310,7 +337,7 @@ export default function SearchView({ organizationProfile = '' }: SearchViewProps
       )}
 
       {opportunities.length > 0 && (
-        <div className="search-results">
+        <div className="search-results" ref={resultsRef}>
           <h3 className="search-results-title">
             Found {opportunities.length} opportunities
             {lastSearchLabel ? ` for "${lastSearchLabel}"` : ''}
@@ -330,9 +357,6 @@ export default function SearchView({ organizationProfile = '' }: SearchViewProps
                       <strong className="opportunity-title">{opp.opportunity_title}</strong>
                       <div className="opportunity-subtitle">
                         <span className="opportunity-agency">{agencyName}</span>
-                        {opp.opportunity_number && (
-                          <span className="opportunity-number">#{opp.opportunity_number}</span>
-                        )}
                       </div>
                     </div>
                     {fitScore > 0 && (
